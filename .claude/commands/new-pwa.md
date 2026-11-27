@@ -66,8 +66,8 @@ $ARGUMENTS
 - Both: mobile-first, touch targets ≥ 44px, works in light and dark mode, no horizontal scroll at 375px width.
 
 ### 6. Deployment to Cloudflare Pages (auto-deploy via GitHub Actions)
-- The app lives in its own folder `<slug>/` at the repo root (next to the other apps). Build output in `<slug>/dist/`. Each app is its own Cloudflare Pages project (own `<slug>.pages.dev` origin) so apps never share storage.
-- Add `<slug>/.gitignore` with `node_modules`, `dist`, `dev-dist`, `.wrangler` (the repo has no root .gitignore).
+- This repo holds **one app at the repo root** (`package.json`, `src/`, `vite.config.ts` at top level). Build output in `dist/`. The app is its own Cloudflare Pages project (own `<slug>.pages.dev` origin).
+- Root `.gitignore` with `node_modules`, `dist`, `dev-dist`, `.wrangler`.
 - `public/_headers`:
   - `/sw.js` and `/index.html` → `Cache-Control: no-cache`
   - hashed assets under `/assets/*` → `Cache-Control: public, max-age=31536000, immutable`
@@ -75,7 +75,7 @@ $ARGUMENTS
 - Add npm scripts:
   - `npm run dev`, `npm run build`, `npm run preview`, `npm test`
   - `npm run deploy` → `npx wrangler pages deploy dist --project-name=<slug> --branch=main` (manual fallback only)
-- Add `.github/workflows/deploy-<slug>.yml` so every merge to `main` that touches the app deploys it. Use exactly this shape (only `<slug>` changes):
+- Add `.github/workflows/deploy.yml` so every merge to `main` deploys (changes only under `.claude/` or `*.md` are skipped):
 
   ```yaml
   name: Deploy <App name>
@@ -83,7 +83,7 @@ $ARGUMENTS
   on:
     push:
       branches: [main]
-      paths: ['<slug>/**', '.github/workflows/deploy-<slug>.yml']
+      paths-ignore: ['.claude/**', '**/*.md']
     workflow_dispatch:
 
   concurrency: deploy-<slug>
@@ -91,9 +91,6 @@ $ARGUMENTS
   jobs:
     deploy:
       runs-on: ubuntu-latest
-      defaults:
-        run:
-          working-directory: <slug>
       env:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -103,7 +100,6 @@ $ARGUMENTS
           with:
             node-version: 22
             cache: npm
-            cache-dependency-path: <slug>/package-lock.json
         - run: npm ci
         - run: npm test
         - run: npm run build
@@ -112,10 +108,10 @@ $ARGUMENTS
         - run: npx wrangler pages deploy dist --project-name=<slug> --branch=main
   ```
 
-  - The `paths` filter means a merge only deploys the apps whose folders changed; other apps are untouched.
-  - `CLOUDFLARE_API_TOKEN` (Account › Cloudflare Pages › Edit) and `CLOUDFLARE_ACCOUNT_ID` are **repository** secrets and already exist in `aimanuslim/first-pwa`. Don't ask me for them and never put them in files. If the app is being built in a different repository, tell me to add both secrets there first (GitHub → Settings → Secrets and variables → Actions).
-  - Do NOT use the Cloudflare dashboard "Connect to Git" flow for new apps.
+  - `CLOUDFLARE_API_TOKEN` (Account › Cloudflare Pages › Edit) and `CLOUDFLARE_ACCOUNT_ID` are **repository** secrets the owner sets up in this repo (GitHub → Settings → Secrets and variables → Actions). Don't ask me for them and never put them in files; just remind me they must exist before the first deploy.
+  - Do NOT use the Cloudflare dashboard "Connect to Git" flow.
   - `package-lock.json` must be committed (`npm ci` needs it).
+- Never commit real bank statements or personal data. Test fixtures are synthetic or masked.
 - Write a short `README.md` with: how it deploys (merge to `main` → workflow; manual re-run from the Actions tab), how to install on iPhone, and how to back up / restore.
 
 ---

@@ -1,0 +1,28 @@
+name: Deploy Duit Check
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['.claude/**', '**/*.md']
+  workflow_dispatch:
+
+concurrency: deploy-duit-check
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      # First run only: create the Pages project (fails harmlessly once it exists).
+      - run: npx wrangler pages project create duit-check --production-branch=main || true
+      - run: npx wrangler pages deploy dist --project-name=duit-check --branch=main
