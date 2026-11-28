@@ -1,0 +1,28 @@
+{
+  "name": "duit-check",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "icons": "node scripts/gen-icons.mjs",
+    "deploy": "npx wrangler pages deploy dist --project-name=duit-check --branch=main"
+  },
+  "dependencies": {
+    "idb": "^8.0.4",
+    "pdfjs-dist": "^6.5.438",
+    "preact": "^11.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.7",
+    "fake-indexeddb": "^6.2.8",
+    "sharp": "^0.35.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.4.0",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.1.2"
+  }
+}
