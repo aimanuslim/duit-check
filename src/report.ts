@@ -8,9 +8,11 @@ export interface Totals {
   simpanan: number; // net put away
   belum: number; // uncategorised money out
   belumCount: number;
+  /** money out in categories marked "tolak masa kira zakat" (any bucket) */
+  tolakan: number;
 }
 
-const empty = (): Totals => ({ pendapatan: 0, keperluan: 0, kehendak: 0, simpanan: 0, belum: 0, belumCount: 0 });
+const empty = (): Totals => ({ pendapatan: 0, keperluan: 0, kehendak: 0, simpanan: 0, belum: 0, belumCount: 0, tolakan: 0 });
 
 export function bucketOf(t: Txn, cats: Map<string, Category>): Bucket | null {
   return cats.get(t.categoryId)?.bucket ?? null;
@@ -22,6 +24,7 @@ export function totals(txns: Txn[], cats: Map<string, Category>): Totals {
   for (const t of txns) {
     const b = bucketOf(t, cats);
     if (b === 'pindahan') continue;
+    if (cats.get(t.categoryId)?.zakatDeduct) r.tolakan -= t.amountSen;
     if (b === 'pendapatan') r.pendapatan += t.amountSen;
     else if (b) r[b] -= t.amountSen;
     else if (t.amountSen < 0) {
@@ -62,7 +65,7 @@ export const ZAKAT_RATE = 0.025;
 
 export interface ZakatResult {
   pendapatan: number;
-  keperluan: number;
+  tolakan: number;
   /** what the 2.5% is charged on */
   base: number;
   nisab: number | null;
@@ -70,11 +73,11 @@ export interface ZakatResult {
   zakat: number;
 }
 
-/** Dengan tolakan: 2.5% x (pendapatan - keperluan). Tanpa tolakan: 2.5% x pendapatan. */
+/** Dengan tolakan: 2.5% x (pendapatan - kategori bertanda tolak zakat). Tanpa tolakan: 2.5% x pendapatan. */
 export function zakatFor(t: Totals, method: ZakatMethod, nisab: number | null): ZakatResult {
-  const base = Math.max(0, method === 'tolakan' ? t.pendapatan - t.keperluan : t.pendapatan);
+  const base = Math.max(0, method === 'tolakan' ? t.pendapatan - t.tolakan : t.pendapatan);
   const wajib = nisab === null ? null : base >= nisab;
-  return { pendapatan: t.pendapatan, keperluan: t.keperluan, base, nisab, wajib, zakat: wajib === false ? 0 : Math.round(base * ZAKAT_RATE) };
+  return { pendapatan: t.pendapatan, tolakan: t.tolakan, base, nisab, wajib, zakat: wajib === false ? 0 : Math.round(base * ZAKAT_RATE) };
 }
 
 export const inPeriod = (t: Txn, year: string, month?: string) => t.date.startsWith(month ? `${year}-${month}` : year);

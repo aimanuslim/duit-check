@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import { addRule, applyRules } from '../actions';
-import { BUCKETS, BUCKET_LABEL, TRANSFER_CATEGORY_ID, deleteCategory, deleteRule, saveCategory, type Bucket, type Category } from '../db';
+import { BUCKETS, BUCKET_LABEL, TRANSFER_CATEGORY_ID, canDeduct, deleteCategory, deleteRule, saveCategory, type Bucket, type Category } from '../db';
 import { Header, Sheet, Toast, catLabel, useData } from '../ui';
 
 export function Categories() {
@@ -31,7 +31,10 @@ export function Categories() {
               .filter((c) => c.bucket === b)
               .map((c) => (
                 <li key={c.id} class="tap row between" onClick={() => setEdit(c)}>
-                  <span>{catLabel(c)}</span>
+                  <span>
+                    {catLabel(c)}
+                    {c.zakatDeduct && <small class="tag">🌙 tolak zakat</small>}
+                  </span>
                   <small class="muted">{count(c.id)} txn · {d.rules.filter((r) => r.categoryId === c.id).length} rule</small>
                 </li>
               ))}
@@ -117,6 +120,7 @@ function CatSheet(props: { cat: Category | null; used: number; onClose: () => vo
   const [name, setName] = useState(c?.name ?? '');
   const [emoji, setEmoji] = useState(c?.emoji ?? '🏷️');
   const [bucket, setBucket] = useState<Bucket>(c?.bucket ?? 'keperluan');
+  const [deduct, setDeduct] = useState(c?.zakatDeduct ?? true);
   const system = c?.id === TRANSFER_CATEGORY_ID;
   return (
     <Sheet title={c ? 'Edit kategori' : 'Kategori baru'} onClose={props.onClose}>
@@ -127,7 +131,11 @@ function CatSheet(props: { cat: Category | null; used: number; onClose: () => vo
         </div>
         <label class="field">
           <span>Kira sebagai</span>
-          <select value={bucket} disabled={system} onChange={(e) => setBucket((e.target as HTMLSelectElement).value as Bucket)}>
+          <select value={bucket} disabled={system} onChange={(e) => {
+              const b = (e.target as HTMLSelectElement).value as Bucket;
+              setBucket(b);
+              setDeduct(b === 'keperluan');
+            }}>
             {BUCKETS.map((b) => (
               <option key={b} value={b}>
                 {BUCKET_LABEL[b]}
@@ -135,12 +143,21 @@ function CatSheet(props: { cat: Category | null; used: number; onClose: () => vo
             ))}
           </select>
         </label>
-        <p class="muted small">Keperluan je yg ditolak dari pendapatan masa kira zakat (dengan tolakan).</p>
+        {canDeduct(bucket) && (
+          <label class="check">
+            <input type="checkbox" checked={deduct} onChange={(e) => setDeduct((e.target as HTMLInputElement).checked)} />
+            <span>
+              🌙 Tolak masa kira zakat (dengan tolakan)
+              <br />
+              <small class="muted">Default ON utk Keperluan. ON-kan utk benda lain kalau panduan negeri kau benarkan, cth pemberian kat mak ayah.</small>
+            </span>
+          </label>
+        )}
         <button
           class="btn primary block"
           disabled={!name.trim()}
           onClick={async () => {
-            await saveCategory({ id: c?.id, name, emoji, bucket });
+            await saveCategory({ id: c?.id, name, emoji, bucket, zakatDeduct: deduct });
             props.onDone();
           }}
         >

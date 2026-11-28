@@ -26,7 +26,7 @@ export function Zakat() {
   const wajibYear = zakatFor(yearTot, saved.method, nisab).wajib;
   const r = zakatFor(tot, saved.method, null);
   const zakat = wajibYear === false ? 0 : r.zakat;
-  const keperluan = byCategory(rows, d.catMap).filter((c) => c.category?.bucket === 'keperluan');
+  const tolakan = byCategory(rows, d.catMap).filter((c) => c.category?.zakatDeduct);
   const months = [...new Set(d.txns.filter((t) => inPeriod(t, y)).map((t) => t.date.slice(5, 7)))].sort();
 
   if (!d.txns.length)
@@ -56,8 +56,8 @@ export function Zakat() {
         </div>
         {saved.method === 'tolakan' && (
           <div class="row between">
-            <span>− Keperluan</span>
-            <b>{rm(r.keperluan)}</b>
+            <span>− Tolakan</span>
+            <b>{rm(r.tolakan)}</b>
           </div>
         )}
         <div class="row between">
@@ -98,7 +98,7 @@ export function Zakat() {
               <tr>
                 <th>Bulan</th>
                 <th>Masuk</th>
-                <th>Perlu</th>
+                <th>Tolakan</th>
                 <th>2.5%</th>
               </tr>
             </thead>
@@ -109,7 +109,7 @@ export function Zakat() {
                   <tr key={m} class="tap" onClick={() => setMonth(m)}>
                     <td>{monthName(m)}</td>
                     <td>{rm(z.pendapatan)}</td>
-                    <td>{rm(z.keperluan)}</td>
+                    <td>{rm(z.tolakan)}</td>
                     <td>{rm(wajibYear === false ? 0 : z.zakat)}</td>
                   </tr>
                 );
@@ -119,12 +119,12 @@ export function Zakat() {
         </>
       )}
 
-      <h2 class="section">Apa yg dikira keperluan</h2>
+      <h2 class="section">Apa yg ditolak</h2>
       <p class="muted small">
-        Keperluan = semua kategori dalam bucket "Keperluan". Nak tukar mana satu kira? Edit bucket kategori kat <a href="#/categories">Kategori</a>, atau tukar kategori transaksi tu.
+        Kategori yg ditanda "Tolak masa kira zakat" (default: semua Keperluan). Nak tambah/buang — cth pemberian kat mak ayah — edit kategori tu kat <a href="#/categories">Kategori</a>.
       </p>
       <ul class="list">
-        {keperluan.map((c) => (
+        {tolakan.map((c) => (
           <li key={c.category!.id} class="row between">
             <span>{catLabel(c.category)}</span>
             <span class="money">{rm(c.sen)}</span>
@@ -132,7 +132,7 @@ export function Zakat() {
         ))}
       </ul>
       <p class="muted small">
-        Formula: dengan tolakan = 2.5% × (pendapatan − keperluan); tanpa tolakan = 2.5% × pendapatan. Kehendak/leisure x ditolak. Ni anggaran je — confirm kaedah & had tolakan dgn pusat zakat negeri kau.
+        Formula: dengan tolakan = 2.5% × (pendapatan − kategori yg ditanda tolak); tanpa tolakan = 2.5% × pendapatan. Ni anggaran je — confirm kaedah & had tolakan dgn pusat zakat negeri kau.
       </p>
     </main>
   );
