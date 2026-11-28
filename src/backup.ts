@@ -23,7 +23,10 @@ interface RawFile {
 }
 
 /** Index i turns backup data at schemaVersion i+1 into i+2. Mirrors db.ts migrations. */
-const backupMigrations: Array<(data: any) => any> = [];
+const backupMigrations: Array<(data: any) => any> = [
+  // v1 -> v2: zakatDeduct per category
+  (d) => (isObj(d) && Array.isArray(d.categories) ? { ...d, categories: d.categories.map((c: any) => ({ ...c, zakatDeduct: c?.bucket === 'keperluan' })) } : d),
+];
 
 export class BackupError extends Error {}
 export class NeedsPassphrase extends Error {}
@@ -56,7 +59,7 @@ function validate(d: unknown): Data {
   d.accounts.forEach((a: unknown, i: number) => check(base(a) && isStr(a.name) && isStr(a.kind), `akaun #${i}`));
   d.statements.forEach((s: unknown, i: number) => check(base(s) && isStr(s.statementDate), `statement #${i}`));
   d.txns.forEach((t: unknown, i: number) => check(base(t) && isStr(t.accountId) && isStr(t.date) && Number.isInteger(t.amountSen) && isStr(t.categoryId) && isStr(t.description), `transaksi #${i}`));
-  d.categories.forEach((c: unknown, i: number) => check(base(c) && isStr(c.name) && BUCKETS.includes(c.bucket), `kategori #${i}`));
+  d.categories.forEach((c: unknown, i: number) => check(base(c) && isStr(c.name) && BUCKETS.includes(c.bucket) && typeof c.zakatDeduct === 'boolean', `kategori #${i}`));
   d.rules.forEach((r: unknown, i: number) => check(base(r) && isStr(r.keyword) && isStr(r.categoryId), `rule #${i}`));
   return d as Data;
 }

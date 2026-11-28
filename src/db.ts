@@ -1,9 +1,9 @@
 // The only module that touches IndexedDB. UI code goes through this typed API.
-import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction, type StoreNames } from 'idb';
 import type { AccountKind, Bank, ParsedStatement } from './parse/types';
 
 export const DB_NAME = 'duit-check';
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** How a category counts. Zakat (dengan tolakan) = pendapatan - keperluan. */
 export type Bucket = 'keperluan' | 'kehendak' | 'simpanan' | 'pendapatan' | 'pindahan';
@@ -67,6 +67,8 @@ export interface Category {
   name: string;
   emoji: string;
   bucket: Bucket;
+  /** Deducted from pendapatan when kira zakat dengan tolakan. Default: bucket === 'keperluan'. */
+  zakatDeduct: boolean;
   order: number;
   createdAt: number;
   updatedAt: number;
@@ -98,8 +100,13 @@ interface Schema extends DBSchema {
   meta: { key: string; value: { key: string; value: unknown } };
 }
 
+type UpgradeTx = IDBPTransaction<Schema, StoreNames<Schema>[], 'versionchange'>;
+
+/** Buckets whose categories may be marked as a zakat deduction (not income, not transfers). */
+export const canDeduct = (b: Bucket) => b !== 'pendapatan' && b !== 'pindahan';
+
 /** Index i upgrades the DB from version i to i+1. Append only; never edit a shipped entry. */
-const migrations: Array<(db: IDBPDatabase<Schema>) => void> = [
+const migrations: Array<(db: IDBPDatabase<Schema>, tx: UpgradeTx) => void | Promise<void>> = [
   (db) => {
     db.createObjectStore('accounts', { keyPath: 'id' });
     db.createObjectStore('statements', { keyPath: 'id' });
@@ -108,14 +115,19 @@ const migrations: Array<(db: IDBPDatabase<Schema>) => void> = [
     db.createObjectStore('rules', { keyPath: 'id' });
     db.createObjectStore('meta', { keyPath: 'key' });
   },
+  // v1 -> v2: per-category zakat deduction flag (keperluan stays deducted as before)
+  async (_db, tx) => {
+    const store = tx.objectStore('categories');
+    for (const c of await store.getAll()) await store.put({ ...c, zakatDeduct: c.bucket === 'keperluan' });
+  },
 ];
 
 let dbPromise: Promise<IDBPDatabase<Schema>> | null = null;
 
 function db(): Promise<IDBPDatabase<Schema>> {
   dbPromise ??= openDB<Schema>(DB_NAME, SCHEMA_VERSION, {
-    upgrade(database, oldVersion) {
-      for (let v = oldVersion; v < SCHEMA_VERSION; v++) migrations[v](database);
+    async upgrade(database, oldVersion, _newVersion, tx) {
+      for (let v = oldVersion; v < SCHEMA_VERSION; v++) await migrations[v](database, tx);
     },
     blocking() {
       dbPromise?.then((d) => d.close());
@@ -163,7 +175,7 @@ export async function seedIfEmpty(): Promise<void> {
   const now = Date.now();
   DEFAULT_CATEGORIES.forEach(([emoji, name, bucket, kws], order) => {
     const id = bucket === 'pindahan' ? TRANSFER_CATEGORY_ID : uid();
-    void tx.objectStore('categories').put({ id, name, emoji, bucket, order, createdAt: now, updatedAt: now });
+    void tx.objectStore('categories').put({ id, name, emoji, bucket, zakatDeduct: bucket === 'keperluan', order, createdAt: now, updatedAt: now });
     for (const keyword of kws) void tx.objectStore('rules').put({ id: uid(), keyword, categoryId: id, createdAt: now, updatedAt: now });
   });
   void tx.objectStore('meta').put({ key: 'seeded', value: true });
@@ -263,14 +275,14 @@ export async function updateAccount(id: string, patch: Partial<Pick<Account, 'na
 
 // ---------- categories / rules ----------
 
-export async function saveCategory(input: Pick<Category, 'name' | 'emoji' | 'bucket'> & { id?: string }): Promise<Category> {
+export async function saveCategory(input: Pick<Category, 'name' | 'emoji' | 'bucket'> & { id?: string; zakatDeduct?: boolean }): Promise<Category> {
   const name = input.name.trim();
   if (!name) throw new Error('Nama kena isi');
   const d = await db();
   const now = Date.now();
   const existing = input.id ? await d.get('categories', input.id) : undefined;
   const order = existing?.order ?? (await d.getAll('categories')).reduce((m, c) => Math.max(m, c.order + 1), 0);
-  const c: Category = { id: existing?.id ?? uid(), name, emoji: input.emoji.trim(), bucket: input.bucket, order, createdAt: existing?.createdAt ?? now, updatedAt: now };
+  const c: Category = { id: existing?.id ?? uid(), name, emoji: input.emoji.trim(), bucket: input.bucket, zakatDeduct: canDeduct(input.bucket) && (input.zakatDeduct ?? input.bucket === 'keperluan'), order, createdAt: existing?.createdAt ?? now, updatedAt: now };
   await d.put('categories', c);
   return c;
 }

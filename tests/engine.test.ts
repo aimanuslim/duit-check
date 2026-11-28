@@ -50,8 +50,8 @@ describe('recategorize', () => {
 });
 
 describe('zakat (dengan tolakan)', () => {
-  const cat = (id: string, bucket: Category['bucket']): Category => ({ id, name: id, emoji: '', bucket, order: 0, createdAt: 0, updatedAt: 0 });
-  const cats = new Map([cat('gaji', 'pendapatan'), cat('bil', 'keperluan'), cat('fun', 'kehendak'), cat(TRANSFER_CATEGORY_ID, 'pindahan')].map((c) => [c.id, c]));
+  const cat = (id: string, bucket: Category['bucket'], zakatDeduct = bucket === 'keperluan'): Category => ({ id, name: id, emoji: '', bucket, zakatDeduct, order: 0, createdAt: 0, updatedAt: 0 });
+  const cats = new Map([cat('gaji', 'pendapatan'), cat('bil', 'keperluan'), cat('fun', 'kehendak'), cat('mak', 'kehendak', true), cat(TRANSFER_CATEGORY_ID, 'pindahan')].map((c) => [c.id, c]));
   const t = totals(
     [
       tx({ categoryId: 'gaji', amountSen: 1_000_000 }),
@@ -64,11 +64,16 @@ describe('zakat (dengan tolakan)', () => {
     cats,
   );
   it('totals by bucket, ignores pindahan', () => {
-    expect(t).toMatchObject({ pendapatan: 1_000_000, keperluan: 290_000, kehendak: 200_000, belum: 5_000, belumCount: 1 });
+    expect(t).toMatchObject({ pendapatan: 1_000_000, keperluan: 290_000, tolakan: 290_000, kehendak: 200_000, belum: 5_000, belumCount: 1 });
   });
   it('2.5% of pendapatan - keperluan; leisure is NOT deducted', () => {
     expect(zakatFor(t, 'tolakan', null)).toMatchObject({ base: 710_000, zakat: 17_750, wajib: null });
     expect(zakatFor(t, 'tanpa', null).zakat).toBe(25_000);
     expect(zakatFor(t, 'tolakan', 2_000_000)).toMatchObject({ wajib: false, zakat: 0 });
+  });
+  it('a kehendak category marked tolak zakat is deducted too, but stays kehendak in overview', () => {
+    const t2 = totals([tx({ categoryId: 'gaji', amountSen: 1_000_000 }), tx({ categoryId: 'mak', amountSen: -100_000 }), tx({ categoryId: 'bil', amountSen: -100_000 })], cats);
+    expect(t2).toMatchObject({ kehendak: 100_000, keperluan: 100_000, tolakan: 200_000 });
+    expect(zakatFor(t2, 'tolakan', null).base).toBe(800_000);
   });
 });
